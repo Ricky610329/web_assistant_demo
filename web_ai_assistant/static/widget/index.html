@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="data:,">
+  <title>校務 AI 助理</title>
+  <link rel="stylesheet" href="../assets/widget.css">
+  <script defer src="../assets/vendor/marked-18.1.0.umd.js"></script>
+  <script defer src="../assets/vendor/dompurify-3.4.16.min.js"></script>
+  <script defer src="../assets/widget.js"></script>
+</head>
+<body>
+  <main class="app" aria-labelledby="assistant-title">
+    <header class="header">
+      <div class="identity">
+        <span class="identity-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></svg>
+        </span>
+        <div>
+          <h1 id="assistant-title">校務 AI 助理</h1>
+          <p>通用對話助手</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="clear-button" class="icon-button" type="button" title="清除對話" aria-label="清除對話">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m3 0-1 15H6L5 6"/></svg>
+        </button>
+        <button id="close-button" class="icon-button" type="button" title="關閉助理" aria-label="關閉助理">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="demo-banner" class="demo-banner" hidden role="status">示範模式・未連接模型</div>
+    <section id="messages" class="messages" aria-label="對話內容"></section>
+
+    <form id="composer" class="composer" novalidate>
+      <label class="sr-only" for="message-input">輸入訊息</label>
+      <textarea id="message-input" rows="1" maxlength="4000" placeholder="請輸入您的問題…" aria-describedby="input-hint"></textarea>
+      <button id="send-button" class="send-button" type="submit" aria-label="傳送訊息">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+      </button>
+      <button id="cancel-button" class="cancel-button" type="button" hidden>停止</button>
+      <div id="input-hint" class="input-hint">Enter 傳送，Shift + Enter 換行</div>
+    </form>
+    <div id="live-status" class="sr-only" role="status" aria-live="polite"></div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>校務服務入口｜嵌入範例</title>
+  <style>
+    :root { color: #172554; background: #eff6ff; font-family: Georgia, "Noto Serif TC", serif; }
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; background: linear-gradient(180deg,#0f3d70 0 190px,#eff6ff 190px); }
+    header, main { width: min(920px,calc(100% - 32px)); margin-inline: auto; }
+    header { padding: 42px 0 36px; color: #fff; }
+    header p { margin: 6px 0 0; color: #bfdbfe; }
+    h1 { margin: 0; font-size: clamp(28px,5vw,44px); }
+    main { display: grid; grid-template-columns: 1.2fr .8fr; gap: 22px; }
+    section { padding: 28px; border: 1px solid #bfdbfe; border-radius: 8px; background: #fff; box-shadow: 0 14px 35px rgba(30,64,175,.09); }
+    h2 { margin-top: 0; font-size: 21px; }
+    label { display: block; margin-bottom: 7px; font-weight: 700; }
+    input { width: 100%; min-height: 44px; padding: 9px 11px; border: 1px solid #93c5fd; border-radius: 5px; font: inherit; }
+    button { margin-top: 12px; min-height: 42px; padding: 0 18px; border: 0; border-radius: 5px; color: #fff; background: #0f3d70; font: 700 15px system-ui,sans-serif; cursor: pointer; }
+    button:focus-visible, input:focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }
+    #reference-result { min-height: 24px; margin-bottom: 0; color: #166534; font-family: system-ui,sans-serif; }
+    .links { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+    .links a { display: block; padding: 12px; color: #1e3a8a; background: #eff6ff; border-radius: 5px; }
+    @media (max-width:700px) { main { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>校務服務入口</h1>
+    <p>這是另一種版型的既有網站，用來確認助理不影響原頁面功能。</p>
+  </header>
+  <main>
+    <section>
+      <h2>通知信箱測試</h2>
+      <form id="reference-form">
+        <label for="reference-email">電子郵件</label>
+        <input id="reference-email" name="email" type="email" required autocomplete="email" placeholder="name@example.edu.tw">
+        <button id="reference-submit" type="submit">儲存測試資料</button>
+      </form>
+      <p id="reference-result" role="status" aria-live="polite"></p>
+    </section>
+    <section>
+      <h2>常用服務</h2>
+      <ul class="links">
+        <li><a href="#calendar">行事曆</a></li>
+        <li><a href="#forms">表單下載</a></li>
+        <li><a href="#contact">聯絡窗口</a></li>
+      </ul>
+    </section>
+  </main>
+  <script>
+    (function () {
+      var count = 0;
+      var form = document.getElementById("reference-form");
+      var result = document.getElementById("reference-result");
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        count += 1;
+        result.textContent = "原頁面表單運作正常（第 " + count + " 次）。";
+      });
+
+      var params = new URLSearchParams(location.search);
+      var base = params.get("assistant") || "http://127.0.0.1:8000/";
+      var loader = document.createElement("script");
+      loader.src = new URL("embed.js", base).href;
+      loader.defer = true;
+      loader.dataset.assistantUrl = base;
+      loader.dataset.name = "校務 AI 助理";
+      loader.dataset.color = "#0f766e";
+      document.head.appendChild(loader);
+    }());
+  </script>
+</body>
+</html>

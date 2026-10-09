@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Preserve the published bytes and hashes of vendored browser libraries.
+web_ai_assistant/static/assets/vendor/*.js -text
