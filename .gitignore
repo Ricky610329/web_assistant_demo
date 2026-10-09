@@ -2,6 +2,13 @@
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+
+# Local editor settings and retired reference
+.vscode/
+.idea/
+/web_ai_assistant_vanilla/
 
 # Python environments and caches
 .venv/
@@ -15,5 +22,7 @@ __pycache__/
 # Local output
 *.log
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 .artifacts/

@@ -3,6 +3,14 @@
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+.vscode
+.idea
+.artifacts
+htmlcov
+.coverage*
+coverage.xml
 .venv
 venv
 __pycache__
