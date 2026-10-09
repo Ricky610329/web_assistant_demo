@@ -1,0 +1,5 @@
+# Runtime dependencies, pinned to the versions verified for this reference.
+fastapi==0.143.0
+uvicorn==0.54.0
+openai==3.26.1
+pydantic-settings==2.15.0
