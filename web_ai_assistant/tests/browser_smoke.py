@@ -13,6 +13,7 @@ PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT))
 
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from playwright.sync_api import sync_playwright, expect
 
@@ -25,6 +26,21 @@ def main():
     artifacts = PROJECT / ".artifacts"
     artifacts.mkdir(exist_ok=True)
     school = FastAPI()
+    strict_settings = {}
+
+    @school.get("/strict.html")
+    def strict_host():
+        origin = strict_settings["assistant_url"]
+        return HTMLResponse(
+            '<!doctype html><html lang="zh-Hant"><title>CSP host</title>'
+            '<body><h1>Strict CSP host</h1><script defer src="' + origin +
+            '/embed.js"></script></body></html>',
+            headers={"Content-Security-Policy":
+                     "default-src 'self'; script-src " + origin +
+                     "; frame-src " + origin + "; style-src 'self'" +
+                     (" " + origin if strict_settings.get("external_styles") else "")},
+        )
+
     school.mount("/", StaticFiles(directory=PROJECT / "static" / "examples"), name="school")
     checks = []
     console_errors = []
@@ -35,6 +51,7 @@ def main():
         assistant = create_app(Settings(_env_file=None, allowed_frame_origins=[school_url],
                                         requests_per_minute=100))
         with serve(assistant) as assistant_url, sync_playwright() as playwright:
+            strict_settings["assistant_url"] = assistant_url
             browser = playwright.chromium.launch(channel="msedge", headless=True)
             context = browser.new_context(viewport={"width": 1440, "height": 1000})
             page = context.new_page()
@@ -187,6 +204,25 @@ def main():
             page.locator("#reference-submit").click()
             expect(page.locator("#reference-result")).to_contain_text("1")
             checks.append("iframe load failure degrades locally and leaves host form usable")
+            page.unroute(assistant_url + "/widget/**")
+            page.goto(school_url + "/strict.html")
+            expect(page.locator(".launcher")).to_be_visible()
+            assert page.locator(".root").evaluate("el => getComputedStyle(el).position") == "fixed"
+            page.locator(".launcher").click()
+            strict_frame = page.frame_locator("iframe")
+            expect(strict_frame.locator("#demo-banner")).to_be_visible()
+            expect(strict_frame.locator("#message-input")).to_be_visible()
+            checks.append("strict host CSP without inline styles or scripts")
+            strict_settings["external_styles"] = True
+            context.add_init_script(
+                "Object.defineProperty(CSSStyleSheet.prototype, 'replaceSync', {value: undefined});"
+            )
+            page.goto(school_url + "/strict.html")
+            expect(page.locator("link[rel=stylesheet]")).to_have_count(1)
+            expect(page.locator(".root")).to_have_css("position", "fixed")
+            page.locator(".launcher").click()
+            expect(page.frame_locator("iframe").locator("#demo-banner")).to_be_visible()
+            checks.append("external stylesheet fallback under restricted host CSP")
             context.close()
             browser.close()
 

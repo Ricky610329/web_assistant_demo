@@ -54,8 +54,7 @@
     var frame = null;
     var readyTimer = null;
 
-    shadow.innerHTML = [
-      "<style>",
+    var styleText = [
       ":host{all:initial}",
       ".root{position:fixed;right:20px;bottom:20px;z-index:2147483000;font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;color:#111827}",
       ".launcher{width:58px;height:58px;border:0;border-radius:999px;background:", accent, ";color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 12px 30px rgba(15,23,42,.28);transition:transform .16s ease,box-shadow .16s ease}",
@@ -70,14 +69,36 @@
       ".fallback a,.fallback button{box-sizing:border-box;border-radius:10px;padding:10px 14px;font:600 14px/1 system-ui,-apple-system,sans-serif;cursor:pointer}",
       ".fallback a{color:#fff;background:", accent, ";text-decoration:none}.fallback button{color:#334155;background:#fff;border:1px solid #cbd5e1}",
       "@media(max-width:520px){.root{right:12px;bottom:12px}.panel{position:fixed;inset:0;width:100vw;height:100dvh;border:0;border-radius:0}.launcher{width:54px;height:54px}.launcher[aria-expanded=true]{visibility:hidden;pointer-events:none}}",
-      "@media(prefers-reduced-motion:reduce){.launcher{transition:none}}",
-      "</style>",
+      "@media(prefers-reduced-motion:reduce){.launcher{transition:none}}"
+    ].join("");
+
+    var stylesInstalled = false;
+    if (typeof CSSStyleSheet === "function" &&
+        typeof CSSStyleSheet.prototype.replaceSync === "function" &&
+        "adoptedStyleSheets" in shadow) {
+      try {
+        var sheet = new CSSStyleSheet();
+        sheet.replaceSync(styleText);
+        shadow.adoptedStyleSheets = shadow.adoptedStyleSheets.concat(sheet);
+        stylesInstalled = true;
+      } catch (_) { /* use the external stylesheet compatibility path */ }
+    }
+    if (!stylesInstalled) {
+      var fallbackStyles = document.createElement("link");
+      fallbackStyles.rel = "stylesheet";
+      fallbackStyles.href = new URL("assets/embed.css", base).href;
+      shadow.appendChild(fallbackStyles);
+    }
+
+    var template = document.createElement("template");
+    template.innerHTML = [
       '<div class="root">',
       '<section class="panel" hidden aria-label="', assistantName.replace(/[&<>"']/g, ""), '"></section>',
       '<button class="launcher" type="button" aria-label="開啟', assistantName.replace(/[&<>"']/g, ""), '" aria-expanded="false">',
       '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></svg>',
       "</button></div>"
     ].join("");
+    shadow.appendChild(template.content.cloneNode(true));
 
     var panel = shadow.querySelector(".panel");
     var launcher = shadow.querySelector(".launcher");
