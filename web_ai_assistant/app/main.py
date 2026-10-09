@@ -10,6 +10,8 @@ import logging
 import time
 import uuid
 
+import anyio
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
@@ -17,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 
 from .limiter import AdmissionError, Lease, RequestGuard
-from .provider import DemoProvider, IncompleteStreamError, OpenAIProvider, Provider
+from .provider import DemoProvider, IncompleteStreamError, OpenAIProvider, Provider, bounded_close
 from .schemas import ChatRequest
 from .settings import Settings
 
@@ -78,30 +80,36 @@ class RequestBoundary:
                         return await error_response(
                             "body_too_large", "訊息資料過大，請縮短內容。", 413, request_id
                         )(scope, receive, safe_send)
-                chunks = []
+                buffered_body = bytearray()
                 size = 0
-                while True:
-                    message = await receive()
-                    if message["type"] == "http.disconnect":
-                        return
-                    if message["type"] != "http.request":
-                        continue
-                    body = message.get("body", b"")
-                    size += len(body)
-                    if size > self.settings.max_body_bytes:
-                        return await error_response(
-                            "body_too_large", "訊息資料過大，請縮短內容。", 413, request_id
-                        )(scope, receive, safe_send)
-                    chunks.append(body)
-                    if not message.get("more_body", False):
-                        break
+                try:
+                    async with asyncio.timeout(self.settings.body_read_timeout_seconds):
+                        while True:
+                            message = await receive()
+                            if message["type"] == "http.disconnect":
+                                return
+                            if message["type"] != "http.request":
+                                continue
+                            body = message.get("body", b"")
+                            size += len(body)
+                            if size > self.settings.max_body_bytes:
+                                return await error_response(
+                                    "body_too_large", "訊息資料過大，請縮短內容。", 413, request_id
+                                )(scope, receive, safe_send)
+                            buffered_body.extend(body)
+                            if not message.get("more_body", False):
+                                break
+                except TimeoutError:
+                    return await error_response(
+                        "request_timeout", "傳送訊息逾時，請重新送出。", 408, request_id
+                    )(scope, receive, safe_send)
                 consumed = False
 
                 async def bounded_receive():
                     nonlocal consumed
                     if not consumed:
                         consumed = True
-                        return {"type": "http.request", "body": b"".join(chunks), "more_body": False}
+                        return {"type": "http.request", "body": bytes(buffered_body), "more_body": False}
                     return await receive()
 
                 await self.app(scope, bounded_receive, safe_send)
@@ -116,20 +124,33 @@ class RequestBoundary:
 class LeasedStreamingResponse(StreamingResponse):
     """Release even if the client disconnects before the iterator starts."""
 
-    def __init__(self, content, lease: Lease, **kwargs):
+    def __init__(self, content, lease: Lease, time_budget: float, **kwargs):
         super().__init__(content, **kwargs)
         self.lease = lease
+        self.time_budget = time_budget
 
     async def __call__(self, scope, receive, send):
         try:
-            await super().__call__(scope, receive, send)
+            # Listen for disconnects even on ASGI >=2.4, while upstream is stalled.
+            # One additional second lets a timeout event send; then slow sends stop.
+            with anyio.move_on_after(self.time_budget + 1):
+                async with anyio.create_task_group() as group:
+                    async def stream_response():
+                        try:
+                            await self.stream_response(send)
+                        except OSError:
+                            pass  # A closed transport is ordinary client cancellation.
+                        finally:
+                            group.cancel_scope.cancel()
+
+                    group.start_soon(stream_response)
+                    await self.listen_for_disconnect(receive)
+                    group.cancel_scope.cancel()
         finally:
-            try:
-                close = getattr(self.body_iterator, "aclose", None)
-                if close is not None:
-                    await close()
-            finally:
-                self.lease.release()
+            self.lease.release()
+            close = getattr(self.body_iterator, "aclose", None)
+            if close is not None:
+                await bounded_close(close)
 
 
 def client_ip(request: Request, settings: Settings) -> str:
@@ -161,7 +182,7 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         if owns_provider:
             close = getattr(provider, "close", None)
             if close:
-                await close()
+                await bounded_close(close)
 
     app = FastAPI(title="可嵌入網站的 LLM 助手", docs_url=None, redoc_url=None,
                   openapi_url=None, lifespan=lifespan)
@@ -275,7 +296,7 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
                 logger.info("stream request_id=%s outcome=%s", request_id, outcome)
 
         return LeasedStreamingResponse(
-            generate(), lease,
+            generate(), lease, settings.request_timeout_seconds,
             media_type="text/event-stream",
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
         )

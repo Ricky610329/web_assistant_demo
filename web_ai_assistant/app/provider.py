@@ -1,11 +1,38 @@
 """Translate provider streams into text, leaving browser events provider-neutral."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Awaitable
 from typing import Protocol
 import asyncio
+import logging
+
+import anyio
 
 from openai import AsyncOpenAI
 from .settings import Settings
+
+logger = logging.getLogger("assistant")
+
+
+async def bounded_close(close: Callable[[], Awaitable], grace: float = 1.0) -> None:
+    """A broken provider cleanup must not keep an admission slot indefinitely."""
+    task = asyncio.create_task(close())
+
+    def consume_exception(finished):
+        if not finished.cancelled():
+            finished.exception()
+
+    task.add_done_callback(consume_exception)
+    try:
+        with anyio.CancelScope(shield=True):
+            await asyncio.wait_for(asyncio.shield(task), timeout=grace)
+    except TimeoutError:
+        task.cancel()
+        logger.warning("stream_cleanup outcome=timeout")
+    except asyncio.CancelledError:
+        task.cancel()
+        raise
+    except Exception as exc:
+        logger.warning("stream_cleanup error_type=%s", type(exc).__name__)
 
 
 class Provider(Protocol):
@@ -47,7 +74,7 @@ class OpenAIProvider:
             if not finished:
                 raise IncompleteStreamError()
         finally:
-            await stream.close()
+            await bounded_close(stream.close)
 
     async def close(self) -> None:
         await self.client.close()

@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     max_concurrent_requests: int = Field(default=4, ge=1, le=100)
     requests_per_minute: int = Field(default=20, ge=1, le=10000)
     request_timeout_seconds: float = Field(default=90, gt=0, le=600)
+    body_read_timeout_seconds: float = Field(default=10, gt=0, le=60)
     max_body_bytes: int = Field(default=65536, ge=256, le=1048576)
     max_messages: int = Field(default=20, ge=1, le=200)
     max_message_chars: int = Field(default=4000, ge=1, le=100000)
