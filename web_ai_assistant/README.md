@@ -1,24 +1,21 @@
-# 學校網站 AI 助理參考系統
+# 快速開始
 
-這是一套可獨立部署的小型聊天元件，供學校網站資訊人員參考。精簡的 `embed.js` 會建立 Shadow DOM 隔離的按鈕，使用者開啟時才載入助理來源站的 iframe。FastAPI 同時提供元件檔案與串流聊天 API。
+本系統供教學與開發參考。主網站只需加入一個 script；聊天介面與模型請求由獨立的助理服務處理。
 
-預設 `LLM_MODE=mock`，只顯示固定示範回覆，不會呼叫模型。改成 `LLM_MODE=openai` 後，伺服器才會連到管理者指定、支援 `/chat/completions` 的 OpenAI 相容端點。瀏覽器無法指定模型、上游網址、API 金鑰或系統提示詞。
+建議順序：**先跑離線示範 → 試嵌入 → 接上模型 → 正式部署**。以下指令都在儲存庫根目錄開始操作。實作驗證環境為 Python 3.14。
 
-本參考系統刻意不包含登入、資料庫、檢索增強生成（RAG）、頁面內容擷取、對話保存或瀏覽器工具。請勿把它當成學校政策的正式資訊來源；若日後加入校務資料，須先設計適當的資料審查與授權方式。
+## 1. 啟動離線示範
 
-## 本機啟動
-
-參考執行環境為 Python 3.14。
+選擇自己的作業系統。這些指令不需要啟用虛擬環境，直接使用其中的 Python。
 
 Windows PowerShell：
 
 ```powershell
 cd web_ai_assistant
 py -3.14 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-Copy-Item .env.example .env
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --no-proxy-headers
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --no-proxy-headers
 ```
 
 Linux：
@@ -26,69 +23,99 @@ Linux：
 ```bash
 cd web_ai_assistant
 python3.14 -m venv .venv
-. .venv/bin/activate
-python -m pip install -r requirements.txt
-cp .env.example .env
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --no-proxy-headers
+.venv/bin/python -m pip install -r requirements.txt
+test -f .env || cp .env.example .env
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --no-proxy-headers
 ```
 
-接著檢查 [http://127.0.0.1:8000/healthz](http://127.0.0.1:8000/healthz)，並開啟 [http://127.0.0.1:8000/widget/](http://127.0.0.1:8000/widget/)。設定只會從目前工作目錄載入 `.env`，因此請在本目錄執行指令。
+保留這個終端視窗。開啟[聊天頁面](http://127.0.0.1:8000/widget/)，應看到「示範模式」，傳送訊息後會收到離線示範回覆。這代表介面與串流可用，還沒有接上語言模型。
 
-若要測試跨來源嵌入，請執行 `python -m http.server 8080 --directory static/examples`，再開啟 `http://127.0.0.1:8080/embed.html?assistant=http://127.0.0.1:8000/`。也可用相同查詢參數開啟 `portal.html`，確認元件不會破壞原頁面的表單與樣式。主網站來源必須列在 `ALLOWED_FRAME_ORIGINS`。完整設定請見[嵌入說明](docs/embedding.md)。
+設定從目前工作目錄的 `.env` 載入，因此必須在 `web_ai_assistant/` 啟動。已經有 `.env` 時，不要用範本覆蓋自己的設定。
 
-## 使用 Docker
+## 2. 試嵌入另一個網站
+
+開啟第二個終端，切換到 `web_ai_assistant/`，啟動範例網站：
+
+Windows PowerShell：
+
+```powershell
+.\.venv\Scripts\python.exe -m http.server 8080 --directory static/examples
+```
+
+Linux：
 
 ```bash
-cp .env.example .env
-docker compose up --build -d
-docker compose ps
-curl http://127.0.0.1:8000/healthz
+.venv/bin/python -m http.server 8080 --directory static/examples
 ```
 
-映像使用 `python:3.14-slim`，只安裝執行期套件並複製 `app/` 與 `static/`，服務以非 root 使用者執行。Compose 預設只發布在 `127.0.0.1`，限制為 1 GiB、2 顆 CPU，並固定單一 worker，因為流量限制目前只存在單一程序記憶體中。
+開啟：
 
-若相容模型服務執行在 Docker 主機上，請設定 `LLM_BASE_URL=http://host.docker.internal:4000/v1`。Compose 已加入 Linux 的 `host-gateway` 對應。容器內的 `localhost` 是助理容器本身；模型服務必須監聽容器可到達的位址，並避免直接暴露給不受信任的網路。
+- [最小嵌入範例](http://127.0.0.1:8080/embed.html?assistant=http://127.0.0.1:8000/)
+- [含表單的入口網站範例](http://127.0.0.1:8080/portal.html?assistant=http://127.0.0.1:8000/)
 
-## 連接模型服務
+右下角會出現聊天按鈕，點擊後才載入助理。主網站在 8080 port，助理在 8000 port，兩者是不同來源。請透過這些 HTTP 網址測試，不要直接開啟 HTML 檔案。
 
-在伺服器端 `.env` 設定：
+要放到自己的網站，照[嵌入說明](docs/embedding.md)設定允許來源並加入 script。
+
+## 3. 接上模型
+
+在 `.env` 設定模式、服務網址、模型名稱與金鑰，再重啟助理。`LLM_MODE=openai` 表示使用 **OpenAI 相容協定**，所以 Ollama 也使用這個模式。
+
+例如助理與 Ollama 都直接執行在同一台電腦：
 
 ```dotenv
 LLM_MODE=openai
-LLM_BASE_URL=http://host.docker.internal:4000/v1
-LLM_API_KEY=replace-with-a-real-secret
-LLM_MODEL=administrator-approved-model
-PUBLIC_BASE_URL=https://assistant.school.example
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_API_KEY=ollama
+LLM_MODEL=qwen3:8b
 ```
 
-OpenAI 模式要求 base URL、模型與金鑰都不是空值。若受信任的內部服務確實不檢查身分，可由管理者明確填入非機密的占位值。請勿把金鑰放進 HTML、`embed.js`、查詢參數或版本控制。
+模型名稱須改成你實際已安裝的模型。Docker 的網址不同，請先閱讀[模型服務設定](docs/model-services.md)，其中也有 LiteLLM 與 OpenAI 範例。完整欄位見[設定參考](docs/configuration.md)。
 
-本機直接用 HTTP 存取 Uvicorn 時，請將 `PUBLIC_BASE_URL` 留白。正式環境由反向代理終止 HTTPS 時，請填入瀏覽器實際看到的完整來源站，讓同來源檢查能正確比對 `Origin`，不必全面信任代理標頭。
+## 4. 使用 Docker 或正式部署
 
-LiteLLM 可作為上游相容服務，但不是必要元件，也沒有包含在此部署中。除非另外完成設定與測試，請勿宣稱已整合真正的 LiteLLM 或模型。`SYSTEM_PROMPT` 留白時會使用內建的繁體中文提示詞；填入非空值才會在啟動時取代它。
-
-## 已完成的驗證
-
-- 後端共 45 項測試通過。
-- 以本機真實 HTTP 連線與 OpenAI 相容 SDK gateway 驗證 3 種情境；這不是對真正 LiteLLM 或付費模型的測試。
-- 使用已安裝的 Microsoft Edge 做無頭瀏覽器測試：兩個不同主網站版型、跨來源嵌入、桌面 1440 像素與手機 390 像素、取消、清除、錯誤狀態及安全的歷史紀錄處理皆通過，沒有 JavaScript 例外或非預期 console 錯誤。
-- 本機 vendor 套件稽核結果為 0 個已知弱點。
-- 本機沒有 Docker，因此尚未實際建置映像或執行 Compose。
-
-瀏覽器驗證可用下列指令重跑；需先安裝開發套件，且電腦上已有 Microsoft Edge：
+若已安裝 Docker 與 Docker Compose，在 `web_ai_assistant/` 執行：
 
 ```bash
-python -m pip install -r requirements-dev.txt
-python tests/browser_smoke.py
+docker compose up --build -d
+docker compose ps
 ```
 
-腳本會自行啟動並停止本機測試伺服器。畫面與診斷檔寫入已忽略的 `.artifacts/`，不應提交至版本控制。
+第一次使用先複製 `.env.example` 成 `.env`；若只跑示範，也可使用 Compose 的無 `.env` 預設模式。服務網址是 `http://127.0.0.1:8000/widget/`。
 
-## 文件
+修改 `.env` 後用 `docker compose up -d --force-recreate` 套用，單純 `restart` 不會更新容器環境變數。停止服務用 `docker compose down`。
 
-- [架構與信任邊界](docs/architecture.md)
-- [嵌入學校網站](docs/embedding.md)
-- [HTTP 與串流 API](docs/api.md)
-- [正式部署、代理、疑難排解與回復](docs/deployment.md)
+映像只包含執行程式與靜態資源，以非 root 使用者執行。範本限制為 1 GiB 記憶體、2 顆 CPU，並固定單一 worker。公開部署需要 HTTPS、允許嵌入的網站來源與正確的代理設定，請依照[部署與維運](docs/deployment.md)操作。本機尚未安裝 Docker，範本未經實際建置驗證。
 
-若只要執行開發測試，安裝 `requirements-dev.txt` 後執行 `python -m pytest`。正式環境仍須自行驗證 Docker 建置與實際上游連線。
+## 範圍與驗證
+
+目前支援文字聊天、串流、取消、清除、訊息限制、頻率限制與逾時。瀏覽器不能指定上游服務、模型、系統提示詞或金鑰；這些都由後端管理。
+
+本系統沒有登入、資料庫、對話保存、RAG、校務資料檢索、檔案上傳或頁面擷取。聊天內容保留在目前頁面的記憶體中，清除或重新整理後不會還原。模型不會自動知道你網站或學校的資訊。
+
+實作階段的結果：
+
+| 驗證 | 結果 |
+|---|---|
+| 後端測試 | 45 項通過，含本機真實 HTTP 的相容 gateway 測試 |
+| Edge 瀏覽器驗收 | 12 項通過，含桌面、手機、跨來源、取消、錯誤及 CSP |
+| 真正的模型服務 | 尚未實測 Ollama、LiteLLM 或 OpenAI |
+| Docker | 尚未建置或執行 |
+
+開發者可用建立的虛擬環境重跑：
+
+| 操作 | Windows PowerShell | Linux |
+|---|---|---|
+| 安裝開發套件 | `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt` | `.venv/bin/python -m pip install -r requirements-dev.txt` |
+| 後端測試 | `.\.venv\Scripts\python.exe -m pytest` | `.venv/bin/python -m pytest` |
+| 瀏覽器驗收 | `.\.venv\Scripts\python.exe tests/browser_smoke.py` | `.venv/bin/python tests/browser_smoke.py` |
+
+瀏覽器驗收需已有 Microsoft Edge；它會自行啟停測試伺服器，產物寫入不追蹤的 `.artifacts/`。
+
+## 進一步閱讀
+
+- [模型服務設定](docs/model-services.md)：Ollama、LiteLLM、OpenAI、連線排錯。
+- [設定參考](docs/configuration.md)：所有 `.env` 欄位及重啟方式。
+- [嵌入說明](docs/embedding.md)：script、外觀、網站允許清單與 CSP。
+- [部署與維運](docs/deployment.md)：HTTPS、代理、更新與回復。
+- [架構](docs/architecture.md)與 [API](docs/api.md)：開發者參考。

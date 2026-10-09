@@ -1,5 +1,7 @@
 # 正式環境部署
 
+先完成[本機示範](../README.md)與[模型連線](model-services.md)，再閱讀本頁。這裡使用 `assistant.school.example` 作為助理子網域，請替換成實際網址。
+
 ## 部署方式
 
 助理應與既有學校網站分開部署：
@@ -9,7 +11,7 @@
 3. 用 Docker Compose 建置並啟動單一助理服務。
 4. 在 `127.0.0.1:8000` 前方配置 HTTPS 反向代理。
 5. 檢查 `/healthz`、`/api/config`、元件頁、mock 串流、從真實學校來源站嵌入，以及取消請求。
-6. 先在非公開測試路由設定並測試相容模型，通過後才啟用 `LLM_MODE=openai`。
+6. 在受控測試環境啟用 `LLM_MODE=openai`，實際確認模型回覆與取消行為；通過後再套用至公開服務。
 7. 獨立服務通過檢查後，才在原網站加入單一 script 標籤。
 
 Uvicorn 必須維持單一 worker 與單一副本。並行及頻率限制目前只存在單一程序，增加 worker 或副本後會各自計算。水平擴充前，應先把限制狀態移到共用儲存區。
@@ -51,6 +53,8 @@ server {
 此範例須設定 `PUBLIC_BASE_URL=https://assistant.school.example`。若未設定，Uvicorn 看到的是內部 HTTP 來源站，瀏覽器卻送出外部 HTTPS 來源站，同來源檢查會正確拒絕兩者不符。`PUBLIC_BASE_URL` 只能包含 scheme、host 與選用的 port，不可包含路徑。
 
 ## 日常操作
+
+修改 `.env` 後執行 `docker compose up -d --force-recreate`，讓容器重新讀取設定。單純 `docker compose restart` 不會更新容器環境變數。所有欄位見[設定參考](configuration.md)。
 
 常用檢查：
 
